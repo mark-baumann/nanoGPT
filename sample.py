@@ -1,89 +1,247 @@
 """
-Sample from a trained model
+Text-Generierung aus einem trainierten nanoGPT-Modell.
+Lädt einen Checkpoint und generiert Text autoregressiv.
+
+Verwendung:
+    python sample.py --checkpoint=out/ckpt.pt --prompt="Es war einmal"
+    python sample.py --checkpoint=out/ckpt.pt --num_samples=5 --max_new_tokens=200
+    python sample.py --checkpoint=out/ckpt.pt --temperature=0.8 --top_k=40
 """
+
 import os
-import pickle
-from contextlib import nullcontext
+import argparse
 import torch
-import tiktoken
-from model import GPTConfig, GPT
 
-# -----------------------------------------------------------------------------
-init_from = 'resume' # either 'resume' (from an out_dir) or a gpt2 variant (e.g. 'gpt2-xl')
-out_dir = 'out' # ignored if init_from is not 'resume'
-start = "\n" # or "<|endoftext|>" or etc. Can also specify a file, use as: "FILE:prompt.txt"
-num_samples = 10 # number of samples to draw
-max_new_tokens = 500 # number of tokens generated in each sample
-temperature = 0.8 # 1.0 = no change, < 1.0 = less random, > 1.0 = more random, in predictions
-top_k = 200 # retain only the top_k most likely tokens, clamp others to have 0 probability
-seed = 1337
-device = 'cuda' # examples: 'cpu', 'cuda', 'cuda:0', 'cuda:1', etc.
-dtype = 'bfloat16' if torch.cuda.is_available() and torch.cuda.is_bf16_supported() else 'float16' # 'float32' or 'bfloat16' or 'float16'
-compile = False # use PyTorch 2.0 to compile the model to be faster
-exec(open('configurator.py').read()) # overrides from command line or config file
-# -----------------------------------------------------------------------------
+from model import GPT, GPTConfig
 
-torch.manual_seed(seed)
-torch.cuda.manual_seed(seed)
-torch.backends.cuda.matmul.allow_tf32 = True # allow tf32 on matmul
-torch.backends.cudnn.allow_tf32 = True # allow tf32 on cudnn
-device_type = 'cuda' if 'cuda' in device else 'cpu' # for later use in torch.autocast
-ptdtype = {'float32': torch.float32, 'bfloat16': torch.bfloat16, 'float16': torch.float16}[dtype]
-ctx = nullcontext() if device_type == 'cpu' else torch.amp.autocast(device_type=device_type, dtype=ptdtype)
 
-# model
-if init_from == 'resume':
-    # init from a model saved in a specific directory
-    ckpt_path = os.path.join(out_dir, 'ckpt.pt')
-    checkpoint = torch.load(ckpt_path, map_location=device)
-    gptconf = GPTConfig(**checkpoint['model_args'])
-    model = GPT(gptconf)
-    state_dict = checkpoint['model']
-    unwanted_prefix = '_orig_mod.'
-    for k,v in list(state_dict.items()):
-        if k.startswith(unwanted_prefix):
-            state_dict[k[len(unwanted_prefix):]] = state_dict.pop(k)
-    model.load_state_dict(state_dict)
-elif init_from.startswith('gpt2'):
-    # init from a given GPT-2 model
-    model = GPT.from_pretrained(init_from, dict(dropout=0.0))
+def load_model(checkpoint_path: str, device: str = "cpu") -> GPT:
+    """
+    Lädt ein trainiertes Modell aus einem Checkpoint.
 
-model.eval()
-model.to(device)
-if compile:
-    model = torch.compile(model) # requires PyTorch 2.0 (optional)
+    Args:
+        checkpoint_path: Pfad zur Checkpoint-Datei (.pt)
+        device: Device für das Modell ("cpu", "cuda", "mps")
+    Returns:
+        Geladenes GPT-Modell im eval-Modus
+    """
+    if not os.path.exists(checkpoint_path):
+        raise FileNotFoundError(f"Checkpoint nicht gefunden: {checkpoint_path}")
 
-# look for the meta pickle in case it is available in the dataset folder
-load_meta = False
-if init_from == 'resume' and 'config' in checkpoint and 'dataset' in checkpoint['config']: # older checkpoints might not have these...
-    meta_path = os.path.join('data', checkpoint['config']['dataset'], 'meta.pkl')
-    load_meta = os.path.exists(meta_path)
-if load_meta:
-    print(f"Loading meta from {meta_path}...")
-    with open(meta_path, 'rb') as f:
-        meta = pickle.load(f)
-    # TODO want to make this more general to arbitrary encoder/decoder schemes
-    stoi, itos = meta['stoi'], meta['itos']
-    encode = lambda s: [stoi[c] for c in s]
-    decode = lambda l: ''.join([itos[i] for i in l])
-else:
-    # ok let's assume gpt-2 encodings by default
-    print("No meta.pkl found, assuming GPT-2 encodings...")
-    enc = tiktoken.get_encoding("gpt2")
-    encode = lambda s: enc.encode(s, allowed_special={"<|endoftext|>"})
-    decode = lambda l: enc.decode(l)
+    checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
 
-# encode the beginning of the prompt
-if start.startswith('FILE:'):
-    with open(start[5:], 'r', encoding='utf-8') as f:
-        start = f.read()
-start_ids = encode(start)
-x = (torch.tensor(start_ids, dtype=torch.long, device=device)[None, ...])
+    # Modell-Konfiguration aus Checkpoint extrahieren
+    model_config = checkpoint.get("model_config")
+    if model_config is None:
+        # Fallback: GPT-2 small
+        print("Warnung: Keine model_config im Checkpoint, verwende GPT-2 small Default.")
+        model_config = GPTConfig()
 
-# run generation
-with torch.no_grad():
-    with ctx:
-        for k in range(num_samples):
-            y = model.generate(x, max_new_tokens, temperature=temperature, top_k=top_k)
-            print(decode(y[0].tolist()))
-            print('---------------')
+    # Modell erstellen und Gewichte laden
+    model = GPT(model_config)
+    state_dict = checkpoint.get("model", checkpoint)  # "model" key oder direkt
+    model.load_state_dict(state_dict, strict=False)
+
+    model.to(device)
+    model.eval()
+
+    # Trainings-Info anzeigen
+    iter_num = checkpoint.get("iter_num", "?")
+    best_val_loss = checkpoint.get("best_val_loss", "?")
+    print(f"Modell geladen: {checkpoint_path}")
+    print(f"  Iteration: {iter_num}, Best Val Loss: {best_val_loss}")
+    print(f"  Parameter: {sum(p.numel() for p in model.parameters()) / 1e6:.2f}M")
+
+    return model
+
+
+def encode_prompt(
+    prompt: str, device: str = "cpu"
+) -> torch.Tensor:
+    """
+    Kodiert einen Text-Prompt in Token-Indizes.
+    Verwendet eine einfache Zeichen-basierte Kodierung (wie im Fallback-Datensatz).
+
+    Args:
+        prompt: Text-Prompt
+        device: Ziel-Device
+    Returns:
+        Token-Tensor, Shape (1, T)
+    """
+    # Einfache Zeichen-Kodierung (wie im Fallback-Datensatz von train.py)
+    chars = sorted(list(set(
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 .,;:!?-'\n"
+    )))
+    stoi = {ch: i for i, ch in enumerate(chars)}
+
+    tokens = [stoi.get(c, 0) for c in prompt]  # Unbekannte Zeichen → 0
+    return torch.tensor([tokens], dtype=torch.long, device=device)
+
+
+def decode_tokens(tokens: torch.Tensor) -> str:
+    """
+    Dekodiert Token-Indizes zurück in Text.
+    Verwendet die gleiche Zeichen-basierte Kodierung.
+
+    Args:
+        tokens: Token-Tensor, Shape (T,) oder (1, T)
+    Returns:
+        Dekodierter Text
+    """
+    chars = sorted(list(set(
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 .,;:!?-'\n"
+    )))
+    itos = {i: ch for i, ch in enumerate(chars)}
+
+    if tokens.dim() == 2:
+        tokens = tokens[0]
+    return "".join(itos.get(t.item(), "?") for t in tokens)
+
+
+def generate_samples(
+    model: GPT,
+    prompt: str,
+    num_samples: int,
+    max_new_tokens: int,
+    temperature: float,
+    top_k: int | None,
+    device: str,
+) -> list[str]:
+    """
+    Generiert mehrere Text-Samples aus einem Prompt.
+
+    Args:
+        model: Das geladene GPT-Modell
+        prompt: Start-Text
+        num_samples: Anzahl zu generierender Samples
+        max_new_tokens: Maximale Anzahl neuer Tokens pro Sample
+        temperature: Sampling-Temperatur
+        top_k: Top-k Sampling (None = deaktiviert)
+        device: Device
+    Returns:
+        Liste generierter Texte
+    """
+    # Prompt kodieren
+    start_ids = encode_prompt(prompt, device)
+
+    samples = []
+    for i in range(num_samples):
+        with torch.no_grad():
+            generated = model.generate(
+                start_ids.clone(),
+                max_new_tokens=max_new_tokens,
+                temperature=temperature,
+                top_k=top_k,
+            )
+        text = decode_tokens(generated)
+        samples.append(text)
+
+    return samples
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Text-Generierung mit nanoGPT",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Beispiele:
+  python sample.py --checkpoint=out/ckpt.pt
+  python sample.py --checkpoint=out/ckpt.pt --prompt="Es war einmal" --temperature=0.8
+  python sample.py --checkpoint=out/ckpt.pt --num_samples=3 --max_new_tokens=500
+  python sample.py --checkpoint=out/ckpt.pt --top_k=40 --temperature=0.7
+        """,
+    )
+
+    parser.add_argument(
+        "--checkpoint",
+        type=str,
+        default="out/ckpt.pt",
+        help="Pfad zum Modell-Checkpoint (default: out/ckpt.pt)",
+    )
+    parser.add_argument(
+        "--prompt",
+        type=str,
+        default="\n",
+        help="Start-Prompt für die Generierung (default: Zeilenumbruch)",
+    )
+    parser.add_argument(
+        "--num_samples",
+        type=int,
+        default=1,
+        help="Anzahl zu generierender Samples (default: 1)",
+    )
+    parser.add_argument(
+        "--max_new_tokens",
+        type=int,
+        default=100,
+        help="Maximale Anzahl neuer Tokens (default: 100)",
+    )
+    parser.add_argument(
+        "--temperature",
+        type=float,
+        default=1.0,
+        help="Sampling-Temperatur: <1.0 = deterministischer, >1.0 = kreativer (default: 1.0)",
+    )
+    parser.add_argument(
+        "--top_k",
+        type=int,
+        default=None,
+        help="Top-k Sampling: Nur die k wahrscheinlichsten Tokens behalten (default: None = deaktiviert)",
+    )
+    parser.add_argument(
+        "--device",
+        type=str,
+        default="cpu",
+        help="Device: cpu, cuda, mps (default: cpu)",
+    )
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=None,
+        help="Random Seed für Reproduzierbarkeit",
+    )
+
+    args = parser.parse_args()
+
+    # Seed setzen
+    if args.seed is not None:
+        torch.manual_seed(args.seed)
+        print(f"Random Seed: {args.seed}")
+
+    # Device prüfen
+    if args.device == "cuda" and not torch.cuda.is_available():
+        print("CUDA nicht verfügbar, verwende CPU.")
+        args.device = "cpu"
+    if args.device == "mps" and not torch.backends.mps.is_available():
+        print("MPS nicht verfügbar, verwende CPU.")
+        args.device = "cpu"
+
+    # Modell laden
+    model = load_model(args.checkpoint, args.device)
+
+    # Samples generieren
+    print(f"\n{'='*60}")
+    print(f"Generiere {args.num_samples} Sample(s)...")
+    print(f"Prompt: {repr(args.prompt)}")
+    print(f"Temperature: {args.temperature}, Top-k: {args.top_k}")
+    print(f"Max neue Tokens: {args.max_new_tokens}")
+    print(f"{'='*60}\n")
+
+    samples = generate_samples(
+        model=model,
+        prompt=args.prompt,
+        num_samples=args.num_samples,
+        max_new_tokens=args.max_new_tokens,
+        temperature=args.temperature,
+        top_k=args.top_k,
+        device=args.device,
+    )
+
+    for i, sample in enumerate(samples):
+        print(f"─── Sample {i+1} ───")
+        print(sample)
+        print()
+
+
+if __name__ == "__main__":
+    main()
