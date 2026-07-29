@@ -1,5 +1,6 @@
 # Checkpoints und Outputs
 out/
+attention_plots/
 *.pt
 *.bin
 
