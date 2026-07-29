@@ -81,3 +81,72 @@ class TestFallbackData:
         total = len(train_data) + len(val_data)
         ratio = len(train_data) / total
         assert 0.85 <= ratio <= 0.95  # ~90/10 Split
+
+
+# ═══════════════════════════════════════════════════════════════
+# W&B Integration Tests
+# ═══════════════════════════════════════════════════════════════
+
+class TestWandBTracker:
+    """Tests für WandBTracker aus wandb_utils.py."""
+
+    def test_import(self):
+        """WandBTracker ist importierbar."""
+        from wandb_utils import WandBTracker
+        assert WandBTracker is not None
+
+    def test_initialization_offline(self):
+        """WandBTracker initialisiert im Offline-Modus."""
+        from wandb_utils import WandBTracker
+        tracker = WandBTracker(
+            project="test-nanogpt",
+            config={"n_layer": 6, "n_head": 6, "n_embd": 384},
+            tags=["test"],
+            group="test-group",
+            job_type="test",
+            notes="Test-Run",
+            offline=True,
+        )
+        assert tracker is not None
+        tracker.finish()
+
+    def test_log_step(self):
+        """log_step() läuft ohne Fehler."""
+        from wandb_utils import WandBTracker
+        tracker = WandBTracker(project="test-nanogpt", offline=True)
+        if tracker.is_active:
+            tracker.log_step(
+                iter_num=100, train_loss=2.5, val_loss=2.8,
+                lr=1e-4, mfu=0.5, dt_ms=150.0,
+            )
+        tracker.finish()
+
+    def test_log_eval(self):
+        """log_eval() läuft ohne Fehler."""
+        from wandb_utils import WandBTracker
+        tracker = WandBTracker(project="test-nanogpt", offline=True)
+        if tracker.is_active:
+            tracker.log_eval(iter_num=500, train_loss=1.5, val_loss=1.8)
+        tracker.finish()
+
+    def test_log_checkpoint(self):
+        """log_checkpoint() läuft ohne Fehler."""
+        from wandb_utils import WandBTracker
+        tracker = WandBTracker(project="test-nanogpt", offline=True)
+        if tracker.is_active:
+            tracker.log_checkpoint(iter_num=1000, val_loss=1.2, is_best=True)
+        tracker.finish()
+
+    def test_finish_cleans_up(self):
+        """finish() beendet den Run sauber."""
+        from wandb_utils import WandBTracker
+        tracker = WandBTracker(project="test-nanogpt", offline=True)
+        tracker.finish()
+        tracker.finish()  # Doppeltes finish() sollte safe sein
+
+    def test_is_active_property(self):
+        """is_active Property funktioniert."""
+        from wandb_utils import WandBTracker
+        tracker = WandBTracker(project="test-nanogpt", offline=True)
+        assert isinstance(tracker.is_active, bool)
+        tracker.finish()

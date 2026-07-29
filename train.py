@@ -24,6 +24,13 @@ from torch.distributed import init_process_group, destroy_process_group
 from model import GPT, GPTConfig
 from config import get_config, get_train_config
 
+# ── W&B (optional) ──────────────────────────────────────────
+try:
+    from wandb_utils import WandBTracker
+    WANDB_AVAILABLE = True
+except ImportError:
+    WANDB_AVAILABLE = False
+
 
 # ─────────────────────────────────────────────────────────────
 # Daten-Loading
@@ -278,6 +285,32 @@ def train(train_cfg: dict | None = None):
     iter_num = 0
     best_val_loss = float("inf")
 
+    # ── W&B Tracking ─────────────────────────────────────────
+    tracker = None
+    if master_process and WANDB_AVAILABLE:
+        tracker = WandBTracker(
+            project="nanoGPT",
+            config={
+                "model": f"GPT-{n_layer}L-{n_head}H-{n_embd}E",
+                "n_layer": n_layer,
+                "n_head": n_head,
+                "n_embd": n_embd,
+                "block_size": block_size,
+                "batch_size": batch_size,
+                "gradient_accumulation_steps": gradient_accumulation_steps,
+                "learning_rate": learning_rate,
+                "max_iters": max_iters,
+                "weight_decay": weight_decay,
+                "dropout": dropout,
+                "device": device,
+                "dtype": dtype_str,
+            },
+            tags=["gpt", "transformer", "language-model", dataset],
+            group=dataset,
+            job_type="train",
+            notes=f"nanoGPT Training: {n_layer}L-{n_head}H-{n_embd}E, {max_iters} iters",
+        )
+
     # ── Training Loop ────────────────────────────────────────
     X, Y = get_batch(train_data, block_size, batch_size, device)
     t0 = time.time()
@@ -308,6 +341,10 @@ def train(train_cfg: dict | None = None):
                 f"val loss {losses['val']:.4f}"
             )
 
+            # ── W&B Eval Logging ─────────────────────────────
+            if tracker and tracker.is_active:
+                tracker.log_eval(iter_num, losses['train'], losses['val'])
+
             if losses["val"] < best_val_loss:
                 best_val_loss = losses["val"]
                 if iter_num > 0:
@@ -322,6 +359,10 @@ def train(train_cfg: dict | None = None):
                     checkpoint_path = os.path.join(out_dir, "ckpt.pt")
                     torch.save(checkpoint, checkpoint_path)
                     print(f"  → Checkpoint gespeichert unter {checkpoint_path}")
+
+                    # ── W&B Checkpoint Logging ────────────────
+                    if tracker and tracker.is_active:
+                        tracker.log_checkpoint(iter_num, best_val_loss, is_best=True)
 
         # Abbruchbedingung
         if iter_num > max_iters:
@@ -367,6 +408,16 @@ def train(train_cfg: dict | None = None):
                 f"lr {lr:.2e}"
             )
 
+            # ── W&B Step Logging ──────────────────────────────
+            if tracker and tracker.is_active:
+                tracker.log_step(
+                    iter_num=iter_num,
+                    train_loss=lossf,
+                    lr=lr,
+                    mfu=mfu,
+                    dt_ms=dt * 1000,
+                )
+
         iter_num += 1
         local_iter_num += 1
 
@@ -383,6 +434,11 @@ def train(train_cfg: dict | None = None):
         final_path = os.path.join(out_dir, "ckpt.pt")
         torch.save(final_checkpoint, final_path)
         print(f"\nTraining abgeschlossen! Finaler Checkpoint: {final_path}")
+
+        # ── W&B Cleanup ──────────────────────────────────────
+        if tracker and tracker.is_active:
+            tracker.log_checkpoint(iter_num, best_val_loss, is_best=False)
+            tracker.finish()
 
     if ddp:
         destroy_process_group()
