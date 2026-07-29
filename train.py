@@ -146,21 +146,18 @@ def estimate_loss(
 # Haupt-Training
 # ─────────────────────────────────────────────────────────────
 
-def train(config_overrides: dict | None = None):
+def train(train_cfg: dict | None = None):
     """
     Führt das Training durch.
 
     Args:
-        config_overrides: Dictionary mit Konfigurations-Overrides.
+        train_cfg: Vollständige Trainings-Konfiguration (dict).
+                   Wenn None, wird gpt2-small als Standard verwendet.
     """
 
     # ── Konfiguration ────────────────────────────────────────
-    # Standard: GPT-2 small Training
-    train_cfg = get_train_config("gpt2-small")
-
-    # Overrides anwenden
-    if config_overrides:
-        train_cfg.update(config_overrides)
+    if train_cfg is None:
+        train_cfg = get_train_config("gpt2-small")
 
     # Entpacken
     dataset = train_cfg["dataset"]
@@ -349,10 +346,7 @@ def train(config_overrides: dict | None = None):
 
         # Gradient Clipping
         if grad_clip > 0.0:
-            if ddp:
-                total_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
-            else:
-                total_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
+            torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
 
         # Optimizer Step
         optimizer.step()
