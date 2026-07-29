@@ -393,6 +393,11 @@ def train(train_cfg: dict | None = None):
 # ─────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
+    main()
+
+
+def main():
+    """CLI-Entry-Point für das Training (auch via pyproject.toml scripts)."""
     import argparse
 
     parser = argparse.ArgumentParser(description="nanoGPT Training")
