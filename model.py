@@ -52,7 +52,9 @@ class CausalSelfAttention(nn.Module):
             ),
         )
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self, x: torch.Tensor, output_attentions: bool = False
+    ) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
         B, T, C = x.size()  # Batch, Sequenzlänge, Embedding-Dimension
 
         # Q, K, V berechnen
@@ -64,8 +66,11 @@ class CausalSelfAttention(nn.Module):
         k = k.view(B, T, self.n_head, self.head_dim).transpose(1, 2)
         v = v.view(B, T, self.n_head, self.head_dim).transpose(1, 2)
 
+        # Attention-Weights für Visualisierung
+        att_weights = None
+
         # Flash Attention wenn verfügbar, sonst manuelle Implementierung
-        if hasattr(F, "scaled_dot_product_attention"):
+        if hasattr(F, "scaled_dot_product_attention") and not output_attentions:
             y = F.scaled_dot_product_attention(
                 q, k, v,
                 attn_mask=None,
@@ -73,10 +78,11 @@ class CausalSelfAttention(nn.Module):
                 is_causal=True,
             )
         else:
-            # Manuelle Attention
+            # Manuelle Attention (immer wenn output_attentions=True)
             att = (q @ k.transpose(-2, -1)) * (1.0 / math.sqrt(self.head_dim))
             att = att.masked_fill(self.bias[:, :, :T, :T] == 0, float("-inf"))
             att = F.softmax(att, dim=-1)
+            att_weights = att.detach()  # (B, n_head, T, T)
             att = self.attn_dropout(att)
             y = att @ v
 
@@ -85,6 +91,9 @@ class CausalSelfAttention(nn.Module):
 
         # Output-Projektion
         y = self.resid_dropout(self.c_proj(y))
+
+        if output_attentions:
+            return y, att_weights
         return y
 
 
@@ -116,9 +125,19 @@ class Block(nn.Module):
         self.ln_2 = LayerNorm(config.n_embd, bias=config.bias)
         self.mlp = MLP(config)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = x + self.attn(self.ln_1(x))
+    def forward(
+        self, x: torch.Tensor, output_attentions: bool = False
+    ) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor | None]:
+        att_out = self.attn(self.ln_1(x), output_attentions=output_attentions)
+        if output_attentions:
+            attn_y, att_weights = att_out
+            x = x + attn_y
+        else:
+            x = x + att_out
+            att_weights = None
         x = x + self.mlp(self.ln_2(x))
+        if output_attentions:
+            return x, att_weights
         return x
 
 
@@ -176,14 +195,18 @@ class GPT(nn.Module):
             torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
 
     def forward(
-        self, idx: torch.Tensor, targets: torch.Tensor | None = None
-    ) -> tuple[torch.Tensor, torch.Tensor | None]:
+        self,
+        idx: torch.Tensor,
+        targets: torch.Tensor | None = None,
+        output_attentions: bool = False,
+    ) -> tuple[torch.Tensor, torch.Tensor | None] | tuple[torch.Tensor, torch.Tensor | None, list[torch.Tensor]]:
         """
         Args:
             idx: Token-Indizes, Shape (B, T)
             targets: Ziel-Token für Loss-Berechnung, Shape (B, T) oder None
+            output_attentions: Wenn True, werden Attention-Weights aller Layer zurückgegeben
         Returns:
-            (logits, loss) — loss ist None wenn targets=None
+            (logits, loss) oder (logits, loss, all_attentions)
         """
         device = idx.device
         B, T = idx.size()
@@ -200,8 +223,13 @@ class GPT(nn.Module):
         x = self.transformer.drop(tok_emb + pos_emb)
 
         # Transformer-Blöcke
+        all_attentions = [] if output_attentions else None
         for block in self.transformer.h:
-            x = block(x)
+            if output_attentions:
+                x, att_weights = block(x, output_attentions=True)
+                all_attentions.append(att_weights)
+            else:
+                x = block(x)
 
         # Finale LayerNorm
         x = self.transformer.ln_f(x)
@@ -218,6 +246,8 @@ class GPT(nn.Module):
                 ignore_index=-1,
             )
 
+        if output_attentions:
+            return logits, loss, all_attentions
         return logits, loss
 
     @torch.no_grad()

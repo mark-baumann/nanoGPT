@@ -66,6 +66,24 @@ class TestCausalSelfAttention:
         assert not torch.isnan(y).any()
         assert not torch.isinf(y).any()
 
+    def test_output_attentions(self, config):
+        """Testet, dass output_attentions=True die Attention-Weights zurückgibt."""
+        attn = CausalSelfAttention(config)
+        attn.eval()
+        x = torch.randn(1, 8, 64)
+        with torch.no_grad():
+            y, att_weights = attn(x, output_attentions=True)
+        assert y.shape == x.shape
+        assert att_weights is not None
+        # att_weights: (B, n_head, T, T)
+        assert att_weights.shape == (1, config.n_head, 8, 8)
+        # Kausale Maske: oberes Dreieck sollte ~0 sein
+        for head in range(config.n_head):
+            upper_tri = torch.triu(att_weights[0, head], diagonal=1)
+            assert (upper_tri < 1e-6).all(), (
+                f"Head {head}: Attention auf zukünftige Tokens gefunden!"
+            )
+
 
 class TestMLP:
     """Tests für MLP."""
@@ -87,6 +105,18 @@ class TestBlock:
         x = torch.randn(2, 16, 64)
         y = block(x)
         assert y.shape == x.shape
+
+    def test_output_attentions(self):
+        """Testet, dass der Block Attention-Weights durchreicht."""
+        cfg = GPTConfig(block_size=32, n_embd=64, n_head=4, dropout=0.0)
+        block = Block(cfg)
+        block.eval()
+        x = torch.randn(1, 8, 64)
+        with torch.no_grad():
+            y, att_weights = block(x, output_attentions=True)
+        assert y.shape == x.shape
+        assert att_weights is not None
+        assert att_weights.shape == (1, cfg.n_head, 8, 8)
 
 
 class TestGPT:
@@ -174,3 +204,18 @@ class TestGPT:
             x = torch.randint(0, cfg.vocab_size, (1, 8))
             logits, _ = model(x)
             assert logits.shape == (1, 8, cfg.vocab_size)
+
+    def test_output_attentions(self, model):
+        """Testet, dass das GPT-Modell Attention-Weights aller Layer zurückgibt."""
+        model.eval()
+        x = torch.randint(0, 100, (1, 8))
+        with torch.no_grad():
+            logits, loss, all_attentions = model(x, output_attentions=True)
+        assert logits.shape == (1, 8, 100)
+        assert loss is None
+        assert len(all_attentions) == model.config.n_layer
+        for layer_idx, att in enumerate(all_attentions):
+            assert att.shape == (1, model.config.n_head, 8, 8), (
+                f"Layer {layer_idx}: erwartet (1, {model.config.n_head}, 8, 8), "
+                f"bekam {att.shape}"
+            )
