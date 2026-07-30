@@ -11,7 +11,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from model import GPTConfig, GPT
+from model import GPT
 from config import (
     gpt2_small, gpt2_medium, gpt2_large, gpt2_xl,
     gpt2_baby, gpt2_micro, gpt2_nano,

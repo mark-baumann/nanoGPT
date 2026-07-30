@@ -13,16 +13,14 @@ Verwendung:
 import os
 import time
 import math
-import pickle
 from contextlib import nullcontext
 
 import torch
-import torch.nn as nn
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.distributed import init_process_group, destroy_process_group
 
 from model import GPT, GPTConfig
-from config import get_config, get_train_config
+from config import get_train_config
 
 # ── W&B (optional) ──────────────────────────────────────────
 try:
@@ -448,9 +446,6 @@ def train(train_cfg: dict | None = None):
 # CLI Entry Point
 # ─────────────────────────────────────────────────────────────
 
-if __name__ == "__main__":
-    main()
-
 
 def main():
     """CLI-Entry-Point für das Training (auch via pyproject.toml scripts)."""
@@ -485,3 +480,7 @@ def main():
     base_cfg.update(overrides)
 
     train(base_cfg)
+
+
+if __name__ == "__main__":
+    main()
