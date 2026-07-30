@@ -24,4 +24,6 @@ data/
 .DS_Store
 Thumbs.db
 wandb_runs/
+checkpoints/
+*.jsonl
 uv.lock
