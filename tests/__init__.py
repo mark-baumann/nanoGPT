@@ -1,1 +1,1 @@
-"""Tests für nanoGPT."""
+"""Unit-Tests für nanoGPT."""  # noqa: N999

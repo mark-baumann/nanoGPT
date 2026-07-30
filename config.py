@@ -91,7 +91,7 @@ gpt2_nano = GPTConfig(
 # ─────────────────────────────────────────────────────────────
 
 # Standard-Training auf OpenWebText / eigenem Datensatz
-train_gpt2_small = dict(
+train_gpt2_small = dict(  # noqa: C408
     # Daten
     dataset="openwebtext",          # Name des Datensatzes
     gradient_accumulation_steps=5,  # Akkumulierte Gradienten-Schritte
@@ -131,7 +131,7 @@ train_gpt2_small = dict(
 )
 
 # Schnelles Training für Baby-Modell (Experimente)
-train_gpt2_baby = dict(
+train_gpt2_baby = dict(  # noqa: C408
     dataset="shakespeare_char",
     gradient_accumulation_steps=1,
     batch_size=64,

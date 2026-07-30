@@ -1,8 +1,9 @@
 """Unit-Tests für config.py — Konfigurationen."""
 
 import pytest
-from model import GPTConfig
+
 from config import get_config, get_train_config
+from model import GPTConfig
 
 
 class TestGetConfig:

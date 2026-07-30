@@ -2,7 +2,8 @@
 
 import pytest
 import torch
-from model import GPT, GPTConfig, LayerNorm, CausalSelfAttention, MLP, Block
+
+from model import GPT, MLP, Block, CausalSelfAttention, GPTConfig, LayerNorm
 
 
 class TestGPTConfig:
@@ -186,7 +187,7 @@ class TestGPT:
     def test_training_step(self, model):
         """Ein vollständiger Trainingsschritt (forward + backward)."""
         x = torch.randint(0, 100, (2, 16))
-        logits, loss = model(x, x)
+        _logits, loss = model(x, x)
         loss.backward()
         # Gradienten sollten existieren
         for p in model.parameters():

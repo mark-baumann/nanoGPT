@@ -1,8 +1,8 @@
 """Unit-Tests für train.py — Training-Loop-Hilfsfunktionen."""
 
-import pytest
 import torch
-from train import get_batch, get_lr, _generate_fallback_data
+
+from train import _generate_fallback_data, get_batch, get_lr
 
 
 class TestGetBatch:

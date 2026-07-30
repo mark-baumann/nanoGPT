@@ -10,17 +10,17 @@ Verwendung:
     python train.py --device=cpu             # Auf CPU trainieren
 """
 
+import math
 import os
 import time
-import math
 from contextlib import nullcontext
 
 import torch
+from torch.distributed import destroy_process_group, init_process_group
 from torch.nn.parallel import DistributedDataParallel as DDP
-from torch.distributed import init_process_group, destroy_process_group
 
-from model import GPT, GPTConfig
 from config import get_train_config
+from model import GPT, GPTConfig
 
 # ── W&B (optional) ──────────────────────────────────────────
 try:
@@ -73,14 +73,12 @@ def load_data(data_dir: str, dataset: str) -> tuple[torch.Tensor, torch.Tensor]:
 
 def _generate_fallback_data() -> tuple[torch.Tensor, torch.Tensor]:
     """Generiert einen einfachen Zeichen-basierten Datensatz aus einem eingebauten Text."""
-    import numpy as np
 
     text = (
         "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 .,;:!?-'\n"
         * 1000
     )
-    chars = sorted(list(set(text)))
-    vocab_size = len(chars)
+    chars = sorted(set(text))
     stoi = {ch: i for i, ch in enumerate(chars)}
 
     print(f"Fallback-Datensatz: {len(chars)} eindeutige Zeichen, {len(text)} Zeichen insgesamt")
@@ -197,7 +195,7 @@ def train(train_cfg: dict | None = None):
     dtype_str = train_cfg["dtype"]
 
     # ── Distributed Setup ────────────────────────────────────
-    ddp = int(os.environ.get("RANK", -1)) != -1
+    ddp = int(os.environ.get("RANK", "-1")) != -1
     ddp_local_rank = 0
     if ddp:
         init_process_group(backend="nccl")
@@ -375,7 +373,7 @@ def train(train_cfg: dict | None = None):
                 )
 
             with ctx:
-                logits, loss = model(X, Y)
+                _logits, loss = model(X, Y)
                 loss = loss / gradient_accumulation_steps
 
             # Nächstes Batch sofort laden (Prefetch)

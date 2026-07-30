@@ -9,6 +9,7 @@ import sys
 from pathlib import Path
 
 import matplotlib
+
 matplotlib.use("Agg")  # Headless-Backend
 import matplotlib.pyplot as plt
 import numpy as np
@@ -97,7 +98,7 @@ def visualize_attention(
     cols = min(n_heads_plot, 4)
     rows = math.ceil(n_heads_plot / cols)
     fig, axes = plt.subplots(rows, cols, figsize=(4 * cols, 4 * rows), squeeze=False)
-    fig.suptitle(f"Attention pro Head — Layer 1", fontsize=14, y=1.02)
+    fig.suptitle("Attention pro Head — Layer 1", fontsize=14, y=1.02)
 
     for head_idx in range(n_heads_plot):
         ax = axes[head_idx // cols, head_idx % cols]
@@ -236,18 +237,18 @@ def main():
     tokens = list(text)
     print(f"📝 Text: '{text}' ({len(tokens)} Tokens)")
 
-    print(f"🎨 Erstelle Visualisierungen...")
+    print("🎨 Erstelle Visualisierungen...")
     output_dir = visualize_attention(
         model, input_ids, tokens=tokens,
         output_dir=args.output, max_tokens=args.max_tokens
     )
 
     print(f"\n✨ Fertig! Alle Plots in: {output_dir}/")
-    print(f"   - attention_per_layer.png")
-    print(f"   - attention_per_head_layer1.png")
-    print(f"   - causal_mask.png")
-    print(f"   - attention_flow.png")
-    print(f"   - attention_summary.txt")
+    print("   - attention_per_layer.png")
+    print("   - attention_per_head_layer1.png")
+    print("   - causal_mask.png")
+    print("   - attention_flow.png")
+    print("   - attention_summary.txt")
 
 
 if __name__ == "__main__":

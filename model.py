@@ -8,7 +8,7 @@ import math
 from dataclasses import dataclass
 
 import torch
-import torch.nn as nn
+from torch import nn
 from torch.nn import functional as F
 
 
@@ -160,7 +160,7 @@ class GPT(nn.Module):
         super().__init__()
         self.config = config
 
-        self.transformer = nn.ModuleDict(dict(
+        self.transformer = nn.ModuleDict(dict(  # noqa: C408
             wte=nn.Embedding(config.vocab_size, config.n_embd),       # Token Embedding
             wpe=nn.Embedding(config.block_size, config.n_embd),       # Position Embedding
             drop=nn.Dropout(config.dropout),
@@ -209,7 +209,7 @@ class GPT(nn.Module):
             (logits, loss) oder (logits, loss, all_attentions)
         """
         device = idx.device
-        B, T = idx.size()
+        _B, T = idx.size()
         assert T <= self.config.block_size, (
             f"Sequenzlänge {T} überschreitet block_size {self.config.block_size}"
         )
@@ -333,7 +333,7 @@ class GPT(nn.Module):
         # Fused AdamW wenn verfügbar (CUDA)
         fused_available = "fused" in torch.optim.AdamW.__init__.__code__.co_varnames
         use_fused = fused_available and device_type == "cuda"
-        extra_args = dict(fused=True) if use_fused else {}
+        extra_args = {"fused": True} if use_fused else {}
 
         optimizer = torch.optim.AdamW(optim_groups, lr=learning_rate, betas=betas, **extra_args)
         return optimizer

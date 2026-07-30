@@ -1,11 +1,13 @@
 """Unit-Tests für sample.py — Text-Generierung."""
 
+import os
+import tempfile
+
 import pytest
 import torch
-import tempfile
-import os
+
 from model import GPT, GPTConfig
-from sample import encode_prompt, decode_tokens, load_model
+from sample import decode_tokens, encode_prompt, load_model
 
 
 class TestEncodeDecode:

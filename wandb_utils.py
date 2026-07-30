@@ -13,7 +13,6 @@ Verwendung:
 
 import os
 import time
-from typing import Optional
 
 try:
     import wandb
@@ -36,11 +35,11 @@ class WandBTracker:
     def __init__(
         self,
         project: str = "nanoGPT",
-        config: Optional[dict] = None,
-        tags: Optional[list] = None,
-        group: Optional[str] = None,
+        config: dict | None = None,
+        tags: list | None = None,
+        group: str | None = None,
         job_type: str = "train",
-        notes: Optional[str] = None,
+        notes: str | None = None,
         offline: bool = False,
     ):
         self.project = project
@@ -68,13 +67,13 @@ class WandBTracker:
                             stderr=subprocess.DEVNULL,
                         ).decode().strip()
                         self.log({"git_commit": git_commit})
-                    except Exception:
+                    except Exception:  # noqa: S110, BLE001
                         pass
                 print(f"📊 W&B initialisiert (mode={mode}, project={project})")
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 print(f"⚠️  W&B-Init fehlgeschlagen: {e}")
 
-    def log(self, metrics: dict, step: Optional[int] = None):
+    def log(self, metrics: dict, step: int | None = None):
         """Loggt Metriken zu W&B."""
         if self.run:
             self.run.log(metrics, step=step)
@@ -83,10 +82,10 @@ class WandBTracker:
         self,
         iter_num: int,
         train_loss: float,
-        val_loss: Optional[float] = None,
-        lr: Optional[float] = None,
-        mfu: Optional[float] = None,
-        dt_ms: Optional[float] = None,
+        val_loss: float | None = None,
+        lr: float | None = None,
+        mfu: float | None = None,
+        dt_ms: float | None = None,
     ):
         """Loggt einen Trainings-Schritt."""
         metrics = {

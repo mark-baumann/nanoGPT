@@ -25,7 +25,7 @@ for arg in sys.argv[1:]:
         print(f"Overriding config with {config_file}:")
         with open(config_file) as f:
             print(f.read())
-        exec(open(config_file).read())
+        exec(open(config_file).read())  # noqa: S102, SIM115
     else:
         # assume it's a --key=value argument
         assert arg.startswith('--')

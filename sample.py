@@ -8,8 +8,9 @@ Verwendung:
     python sample.py --checkpoint=out/ckpt.pt --temperature=0.8 --top_k=40
 """
 
-import os
 import argparse
+import os
+
 import torch
 
 from model import GPT, GPTConfig
@@ -69,9 +70,9 @@ def encode_prompt(
         Token-Tensor, Shape (1, T)
     """
     # Einfache Zeichen-Kodierung (wie im Fallback-Datensatz von train.py)
-    chars = sorted(list(set(
-        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 .,;:!?-'\n"
-    )))
+    chars = sorted(set(
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 .,;:!?-'\\n"
+    ))
     stoi = {ch: i for i, ch in enumerate(chars)}
 
     tokens = [stoi.get(c, 0) for c in prompt]  # Unbekannte Zeichen → 0
@@ -88,9 +89,9 @@ def decode_tokens(tokens: torch.Tensor) -> str:
     Returns:
         Dekodierter Text
     """
-    chars = sorted(list(set(
-        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 .,;:!?-'\n"
-    )))
+    chars = sorted(set(
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 .,;:!?-'\\n"
+    ))
     itos = {i: ch for i, ch in enumerate(chars)}
 
     if tokens.dim() == 2:
@@ -161,7 +162,7 @@ Beispiele:
     parser.add_argument(
         "--prompt",
         type=str,
-        default="\n",
+        default="\\n",
         help="Start-Prompt für die Generierung (default: Zeilenumbruch)",
     )
     parser.add_argument(
@@ -222,7 +223,7 @@ Beispiele:
     # Samples generieren
     print(f"\n{'='*60}")
     print(f"Generiere {args.num_samples} Sample(s)...")
-    print(f"Prompt: {repr(args.prompt)}")
+    print(f"Prompt: {args.prompt!r}")
     print(f"Temperature: {args.temperature}, Top-k: {args.top_k}")
     print(f"Max neue Tokens: {args.max_new_tokens}")
     print(f"{'='*60}\n")

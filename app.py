@@ -4,19 +4,26 @@ Streamlit-App: nanoGPT — Modell-Architektur & Textgenerierung
 Modell-Architektur visualisieren, Konfigurationen vergleichen, Text generieren.
 """
 
-import streamlit as st
-import matplotlib.pyplot as plt
-import numpy as np
 import sys
 from pathlib import Path
 
+import matplotlib.pyplot as plt
+import numpy as np
+import streamlit as st
+
 sys.path.insert(0, str(Path(__file__).parent))
-from model import GPT
 from config import (
-    gpt2_small, gpt2_medium, gpt2_large, gpt2_xl,
-    gpt2_baby, gpt2_micro, gpt2_nano,
-    get_config, get_train_config,
+    get_config,
+    get_train_config,
+    gpt2_baby,
+    gpt2_large,
+    gpt2_medium,
+    gpt2_micro,
+    gpt2_nano,
+    gpt2_small,
+    gpt2_xl,
 )
+from model import GPT
 
 st.set_page_config(
     page_title="nanoGPT — Architektur & Generierung",
@@ -68,7 +75,7 @@ if seite == "🏗️ Architektur":
             model = GPT(config)
             n_params = sum(p.numel() for p in model.parameters())
             st.metric("Gesamt-Parameter", f"{n_params / 1e6:.1f}M")
-        except Exception:
+        except Exception:  # noqa: BLE001
             st.metric("Gesamt-Parameter", "—")
 
     with col2:
@@ -93,7 +100,7 @@ if seite == "🏗️ Architektur":
 
         def draw_arrow(x1, y1, x2, y2, color='#888888'):
             ax.annotate('', xy=(x2, y2), xytext=(x1, y1),
-                        arrowprops=dict(arrowstyle='->', color=color, lw=1.5))
+                        arrowprops={"arrowstyle": "->", "color": color, "lw": 1.5})
 
         # Input Embeddings
         draw_box(5, y, 8, box_h, "Input Embeddings\nToken + Position", '#45B7D1')
@@ -165,7 +172,7 @@ if seite == "🏗️ Architektur":
         try:
             m = GPT(cfg)
             params.append(sum(p.numel() for p in m.parameters()) / 1e6)
-        except Exception:
+        except Exception:  # noqa: BLE001
             # Schätzung: ~12 * n_layer * n_embd²
             params.append(12 * cfg.n_layer * cfg.n_embd ** 2 / 1e6)
 
@@ -357,7 +364,7 @@ elif seite == "✍️ Text generieren":
                                 f"**Temperatur:** {temperature} | "
                                 f"**Top-k:** {top_k if top_k > 0 else 'aus'}")
 
-                except Exception as e:
+                except Exception as e:  # noqa: BLE001
                     st.error(f"Fehler bei der Generierung: {e}")
                     st.info(
                         "Mögliche Ursachen:\n"
