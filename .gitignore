@@ -27,3 +27,5 @@ wandb_runs/
 checkpoints/
 *.jsonl
 uv.lock
+.venv
+*.pyc
